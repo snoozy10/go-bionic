@@ -9,7 +9,7 @@ Input: [geneve_1564.pdf](/sample_pdf/geneve_1564.pdf)
 <br>
 Output: [boldened.pdf](boldened.pdf)
 # Initial idea:
-raster pdf -> high-fidelity html (pdf2htmlEX) -> bionified html
+`raster pdf` -> `high-fidelity html` (pdf2htmlEX) -> `html with bionic font`
 ## Issues:
 - pdf2htmlEX simply encodes OCR data behind raster pdf.
 While this makes the pdf/html text selectable, it doesn't really help with going bionic.
@@ -17,7 +17,7 @@ While this makes the pdf/html text selectable, it doesn't really help with going
 - Detecting font is challenging for non-standard fonts. So maintaining high-fidelity with proper word/paragraph separation is a tough problem to solve.
 <br><br>
 # Modified idea:
-raster pdf -> bionified raster pdf
+`raster pdf` -> `raster pdf with bionic font`
 <br><br>
 # Future Steps:
 - add concurrency/parallelism as boldening of words are inherently independent
