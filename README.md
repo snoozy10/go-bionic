@@ -25,7 +25,8 @@ While this makes the pdf/html text selectable, it doesn't really help with going
   -- maybe OSD per ROI instead of entire page? perhaps both??
 - handle colored boldening
 <br><br>
-### P.S. boldening = bolding. Personally prefer the term boldening :)
+> [!Note]
+> boldening = bolding. Personally prefer the term boldening 😄
   
 
 
