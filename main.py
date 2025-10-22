@@ -20,7 +20,11 @@ THRESHOLD_REGION_IGNORE = 40
 MAX_WORD_SAMPLES = 10
 # check and correct the orientation of pdfs before going bionic
 CHECK_ORIENTATION = False
+# ratio of word-width getting boldened
 BOLD_RATIO = 0.5
+# languages in the pdf to process by pytesseract
+# https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html
+LANGUAGE = "deu+eng"
 # magic numbers
 KERNEL_MAGIC_NUMBER = 16
 ALPHA_MAGIC_NUMBER = 0.85
@@ -164,7 +168,7 @@ def bolden_roi(
     block_crop = image[y0:y1, x0:x1]
 
     # extract all data from roi
-    block_data = pytesseract.image_to_data(block_crop, output_type=pytesseract.Output.DICT, lang="deu+eng")
+    block_data = pytesseract.image_to_data(block_crop, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
 
     # get the mean height of available text within the region, or None if no text
     mean_height = get_text_height(block_data, 20, False)
@@ -350,8 +354,6 @@ def test_orientation() -> None:
     og_page_img = cv2.cvtColor(np.array(im_fixed), cv2.COLOR_RGB2BGR)
 
     segmented_image, rois = get_rois(og_page_img)
-    # TO-DO
-    # data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang="deu+eng")
 
     # Display image with marked regions to test
     # show_image(segmented_image)
