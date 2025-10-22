@@ -16,7 +16,7 @@ from numpy import floating, ndarray
 
 # threshold of regions to ignore
 THRESHOLD_REGION_IGNORE = 40
-# max number of words to consider for mean text height in a text-region
+# max number of words to consider for mean/median text height in a text-region
 MAX_WORD_SAMPLES = 10
 # check and correct the orientation of pdfs before going bionic
 CHECK_ORIENTATION = False
@@ -26,16 +26,17 @@ KERNEL_MAGIC_NUMBER = 16
 ALPHA_MAGIC_NUMBER = 0.85
 
 
-def get_mean_text_height(
-        data: Any, sample_limit: int = MAX_WORD_SAMPLES
+def get_text_height(
+        data: Any, sample_limit: int = MAX_WORD_SAMPLES, mean: bool = True
 ) -> floating[Any] | None:
     """
-    Calculates the mean height of text in regional text
+    Calculates the mean/median height of text in regional text
 
     :param data: extracted data within roi using pytesseract
     :param sample_limit: how many words to sample from the region (to keep it fast)
+    :param mean: boolean indicating if function should return mean. true:false = mean:median
     :returns:
-        mean height of the text in data["text"]
+        mean/median height of the text in data["text"]
     """
 
     heights = []
@@ -49,8 +50,9 @@ def get_mean_text_height(
 
     if not heights:
         return None  # no text found
-
-    return np.mean(heights)
+    if mean:
+        return np.mean(heights)
+    return np.median(heights)
 
 
 # Source: https://gist.github.com/akash-ch2812/d42acf86e4d6562819cf4cd37d1195e7
@@ -165,7 +167,7 @@ def bolden_roi(
     block_data = pytesseract.image_to_data(block_crop, output_type=pytesseract.Output.DICT, lang="deu+eng")
 
     # get the mean height of available text within the region, or None if no text
-    mean_height = get_mean_text_height(block_data, 10)
+    mean_height = get_text_height(block_data, 20, False)
 
     # if mean height is None, i.e. no text in roi, return
     if mean_height is None:
@@ -306,7 +308,7 @@ def bolden_doc() -> None:
         segmented_image, rois = get_rois(og_page_img)
 
         # Display image with marked regions to test
-        # show_image(segmented_image)
+        show_image(segmented_image)
 
         for bbox in rois:
             bolden_roi(og_page_img, bbox)
