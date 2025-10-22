@@ -1,3 +1,4 @@
+Source of sample pdf "Bible de Genève, 1564 (fonts and typography)": [pdf2htmlEX github](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
 # Initial idea:
 raster pdf -> high-fidelity html (pdf2htmlEX) -> bionified html
 ## Issues:
