@@ -1,3 +1,6 @@
+# Goal:
+Apply bionic font to a PDF while maintaining layout fidelity.
+<br>
 Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
 <br>
 Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
@@ -8,9 +11,10 @@ Output: [boldened.pdf](boldened.pdf)
 # Initial idea:
 raster pdf -> high-fidelity html (pdf2htmlEX) -> bionified html
 ## Issues:
-pdf2htmlEX simply encodes ocr data behind raster pdf.
-While this makes the pdf/html text selectable, it doesn't help with going bionic.
-Detecting font is difficult for non-standard fonts.
+- pdf2htmlEX simply encodes OCR data behind raster pdf.
+While this makes the pdf/html text selectable, it doesn't really help with going bionic.
+- Resulting HTML is messy and difficult to parse (words split by random white spaces, difficult to detect words).
+- Detecting font is challenging for non-standard fonts. So maintaining high-fidelity with proper word/paragraph separation is a tough problem to solve.
 <br><br>
 # Modified idea:
 raster pdf -> bionified raster pdf
