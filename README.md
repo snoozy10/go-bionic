@@ -1,4 +1,10 @@
-Source of sample pdf "Bible de Genève, 1564 (fonts and typography)": [pdf2htmlEX github](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
+Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
+<br>
+Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
+# Result
+Input: [geneve_1564.pdf](/sample_pdf/geneve_1564.pdf)
+<br>
+Output: [boldened.pdf](boldened.pdf)
 # Initial idea:
 raster pdf -> high-fidelity html (pdf2htmlEX) -> bionified html
 ## Issues:
