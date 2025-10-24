@@ -1,6 +1,11 @@
 # Table of Contents
 - [Goal](#goal)
 - [Result](#result)
+- [Initial idea](#initial-idea)
+  - [Issues with the initial idea](#issues-with-the-initial-idea)
+- [Current implementation](#current-implementation)
+- [Future improvements](#future-improvements)
+<br><br> 
 # Goal
 Apply bionic font to a PDF while maintaining layout fidelity.
 <br><br>
@@ -23,13 +28,13 @@ While this makes the pdf/html text selectable, it doesn't really help with going
   - `tesseract` doesn't provide font information.
   - Detecting font is challenging for non-standard fonts (although, this is an issue I plan to revisit)
 <br><br>
-# Modified idea
+# Current implementation
 `raster pdf` -> `raster pdf with partially boldened words`
 <br><br>
-# Future Steps
+# Future improvements
 - Add concurrency/parallelism as boldening of words are inherently independent
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
-  -- Maybe OSD per ROI instead of entire page? perhaps both??
+  - Maybe OSD per ROI instead of entire page? perhaps both??
 - Handle colored boldening
 <br><br>
 > [!Note]
