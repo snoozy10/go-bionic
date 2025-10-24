@@ -1,3 +1,6 @@
+# Table of Contents
+- [Goal](#goal)
+- [Result](#result)
 # Goal
 Apply bionic font to a PDF while maintaining layout fidelity.
 <br><br>
