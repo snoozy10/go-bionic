@@ -1,16 +1,18 @@
-# Goal:
+# Goal
 Apply bionic font to a PDF while maintaining layout fidelity.
 <br><br>
 Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
 <br>
 Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
+<br><br>
 # Result
 Input: [geneve_1564.pdf](/sample_pdf/geneve_1564.pdf)
 <br>
 Output: [boldened.pdf](boldened.pdf)
-# Initial idea:
+<br><br>
+# Initial idea
 `raster pdf` -> `high-fidelity html` (`pdf2htmlEX`/`tesseract`) -> `html with bionic font`
-## Issues:
+## Issues with the initial idea
 - `pdf2htmlEX` simply encodes OCR data in a layer independent of the pdf.
 While this makes the pdf/html text selectable, it doesn't really help with going bionic.
 - Resulting HTML when using `pdf2htmlEX` is messy and difficult to parse (words split by random white spaces, difficult to detect words).
@@ -18,10 +20,10 @@ While this makes the pdf/html text selectable, it doesn't really help with going
   - `tesseract` doesn't provide font information.
   - Detecting font is challenging for non-standard fonts (although, this is an issue I plan to revisit)
 <br><br>
-# Modified idea:
+# Modified idea
 `raster pdf` -> `raster pdf with partially boldened words`
 <br><br>
-# Future Steps:
+# Future Steps
 - Add concurrency/parallelism as boldening of words are inherently independent
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
   -- Maybe OSD per ROI instead of entire page? perhaps both??
