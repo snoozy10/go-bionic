@@ -42,7 +42,6 @@ def get_text_height(
     :returns:
         mean/median height of the text in data["text"]
     """
-
     heights = []
     for i, word in enumerate(data["text"]):
         if not word.strip():
@@ -72,7 +71,7 @@ def get_rois(
         rois: a list of the four bounding co-ordinates of rois
     """
 
-    # only tinker with a copy of the og image
+    # only tinker with a copy of the og image, and draw rectangles in a copied image
     image_copy = image.copy()
 
     gray = cv2.cvtColor(image_copy, cv2.COLOR_BGR2GRAY)
@@ -152,53 +151,42 @@ def show_image(
 # To-do
 def bolden_roi(
         image: ndarray[tuple[Any, ...]],
-        roi_bbox: tuple[int, int, int, int]
+        roi_data: dict
 ) -> None:
     """
     Boldens all the words within one roi
     :param image: image of the container page
-    :param roi_bbox: bounding co-ordinates of one section/block in the image
+    :param roi_data: data belonging to this specific roi i.e. pytesseract's image_to_data for current roi
     """
-    (x0, y0, x1, y1) = roi_bbox
-    # check that the bounding box co-ordinates don't exceed the whole image's bounds
-    x0, y0 = max(0, x0), max(0, y0)
-    x1, y1 = min(image.shape[1], x1), min(image.shape[0], y1)
-
-    # create a crop of just the current roi
-    block_crop = image[y0:y1, x0:x1]
-
-    # extract all data from roi
-    block_data = pytesseract.image_to_data(block_crop, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
-
     # get the mean height of available text within the region, or None if no text
-    mean_height = get_text_height(block_data, 20, False)
+    mean_height = get_text_height(roi_data, 20, False)
 
     # if mean height is None, i.e. no text in roi, return
     if mean_height is None:
         return
 
     # iterate through the words
-    for i, word in enumerate(block_data["text"]):
+    for i, word in enumerate(roi_data["text"]):
         word = word.strip()
         if not word:
             continue
         # print(word)
 
         # get word width, height, ...
-        w = block_data["width"][i]
-        h = block_data["height"][i]
-        x = block_data["left"][i]
-        y = block_data["top"][i]
+        w = roi_data["width"][i]
+        h = roi_data["height"][i]
+        x = roi_data["left"][i]
+        y = roi_data["top"][i]
 
         # if text too small, ignore
         if h < 5:
             continue
 
-        # map word coordinates back to full (uncropped) image
-        abs_x0 = x0 + x
-        abs_y0 = y0 + y
-        abs_x1 = x0 + x + w
-        abs_y1 = y0 + y + h
+        # map word coordinates to full (uncropped) image
+        abs_x0 = x
+        abs_y0 = y
+        abs_x1 = x + w
+        abs_y1 = y + h
 
         # first-(ratio) region of the word
         ratio = BOLD_RATIO
@@ -295,9 +283,11 @@ def bolden_doc() -> None:
 
         # Display image with marked regions to test
         show_image(segmented_image)
+        data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
 
         for bbox in rois:
-            bolden_roi(og_page_img, bbox)
+            roi_data = get_roi_data(data, bbox)
+            bolden_roi(og_page_img, roi_data)
 
         # Display image with bold regions to test
         # show_image(og_page_img)
@@ -318,6 +308,28 @@ def bolden_doc() -> None:
         )
 
 
+# Adding function to decrease pytesseract's image_to_data overhead
+def get_roi_data(
+        data: dict,
+        roi: tuple[int, int, int, int]
+) -> dict:
+    """
+    Filters pytesseract's image_to_data dictionary and returns dictionary specific to one roi
+    :param data: pytesseract's image_to_data dictionary for the entire image
+    :param roi: bounding box of the roi
+    :returns:
+    data dictionary specific to the input roi
+    """
+    x1, y1, x2, y2 = roi
+    indices = []
+    for i, word in enumerate(data["text"]):
+        if not word.strip():
+            continue
+        x, y, w, h = (data["left"][i], data["top"][i], data["width"][i], data["height"][i])
+        if x >= x1 and x + w <= x2 and y >= y1 and y + h <= y2:
+            indices.append(i)
+    return {k: [v[i] for i in indices] for k, v in data.items()}
+
+
 if __name__ == "__main__":
     bolden_doc()
-    # test_orientation()
