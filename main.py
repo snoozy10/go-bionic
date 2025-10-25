@@ -61,8 +61,8 @@ def get_text_height(
 # Source: https://gist.github.com/akash-ch2812/d42acf86e4d6562819cf4cd37d1195e7
 # Edited before use
 def get_rois(
-        image: ndarray[tuple[typing.Any, ...]]
-) -> tuple[ndarray[tuple[Any, ...]], list[tuple[int, int, int, int]]]:
+        image: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> tuple[ndarray[tuple[typing.Any, ...], np.dtype], list[tuple[int, int, int, int]]]:
     """
     Gets the bounding co-ordinates of sections within an image
     :param image: numpy array representation of the image
@@ -110,11 +110,11 @@ def get_rois(
 
 
 def resize_with_aspect_ratio(
-        image: ndarray[tuple[typing.Any, ...]],
+        image: ndarray[tuple[typing.Any, ...], np.dtype],
         width: int | None = None,
         height: int | None = None,
         inter: int = cv2.INTER_AREA
-) -> ndarray[tuple[Any, ...]]:
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
     """
     Resizes the opencv image viewing window
     """
@@ -134,7 +134,7 @@ def resize_with_aspect_ratio(
 
 
 def show_image(
-        image: ndarray[tuple[typing.Any, ...]],
+        image: ndarray[tuple[typing.Any, ...], np.dtype],
         width: int = 450,
         resize: bool = True
 ) -> None:
@@ -150,7 +150,7 @@ def show_image(
 # Note: current implementation cannot handle a page with both horizontal and vertical texts
 # To-do
 def bolden_roi(
-        image: ndarray[tuple[Any, ...]],
+        image: ndarray[tuple[typing.Any, ...], np.dtype],
         roi_data: dict
 ) -> None:
     """
@@ -194,7 +194,7 @@ def bolden_roi(
         # edge where boldening ends
         mid_x = int(abs_x0 + ratio * (abs_x1 - abs_x0))
 
-        # in case ratio is negative lol
+        # in case ratio is negative. lol.
         if mid_x <= abs_x0:
             continue
 
@@ -208,7 +208,6 @@ def bolden_roi(
         # start adaptive, smooth boldening
         # -- convert to gray
         gray = cv2.cvtColor(word_left_crop, cv2.COLOR_BGR2GRAY)
-
         # -- threshold, inverted
         _, thresh = cv2.threshold(
             gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
@@ -235,9 +234,25 @@ def bolden_roi(
         image[abs_y0:abs_y1, abs_x0:mid_x] = sub_final
 
 
+        # # To-do lighten out the right portion of the word
+        opacity = 0.8  # 80% opacity = keep 80% of original brightness
+
+        word_right_crop = image[abs_y0:abs_y1, mid_x:abs_x1]
+
+        # Blend with white
+        lightened = cv2.addWeighted(
+            word_right_crop, opacity,  # original image weight
+            255 * np.ones_like(word_right_crop, dtype=np.uint8), 1 - opacity,  # white overlay
+            0
+        )
+
+        # Replace region
+        image[abs_y0:abs_y1, mid_x:abs_x1] = lightened
+
+
 def rotate_page(
-        og_page_img: ndarray[tuple[typing.Any, ...]]
-) -> ndarray[tuple[typing.Any, ...]]:
+        og_page_img: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
     """
     Correct image's orientation issues
     :param og_page_img: original page image
@@ -258,10 +273,11 @@ def rotate_page(
 
 def bolden_doc() -> None:
     """
-    Boldens the first-(BOLD_RATIO) of each word encountered
+    Boldens the first-(BOLD_RATIO) of each word encountered in pdf
     Works properly on horizontally aligned text for now
     """
     root = Path(__file__).resolve().parent
+    # pdf_path = os.path.join(root, "sample_pdf", "test.pdf")
     pdf_path = os.path.join(root, "sample_pdf", "geneve_1564.pdf")
 
     doc = pymupdf.open(pdf_path)
@@ -274,26 +290,7 @@ def bolden_doc() -> None:
         pix = page.get_pixmap(dpi=300)
         og_page_img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
 
-        if CHECK_ORIENTATION:
-            og_page_img = rotate_page(og_page_img)
-        else:
-            og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_RGB2BGR)
-
-        segmented_image, rois = get_rois(og_page_img)
-
-        # Display image with marked regions to test
-        show_image(segmented_image)
-        data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
-
-        for bbox in rois:
-            roi_data = get_roi_data(data, bbox)
-            bolden_roi(og_page_img, roi_data)
-
-        # Display image with bold regions to test
-        # show_image(og_page_img)
-
-        # To-do: handle colored bolding
-        og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_BGR2RGB)
+        og_page_img = bolden_image(og_page_img)
 
         # save boldened image to list
         images.append(Image.fromarray(og_page_img))
@@ -301,11 +298,43 @@ def bolden_doc() -> None:
     # Save all images to one continuous PDF
     if images:
         images[0].save(
-            "boldened.pdf",
+            "test_boldened.pdf",
             save_all=True,
             append_images=images[1:],
             resolution=300.0,
         )
+
+
+def bolden_image(
+        og_page_img: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
+    """Boldens the first-(BOLD_RATIO) of each word encountered in png
+    Works properly on horizontally aligned text for now
+    :param og_page_img: image to be processed
+    :returns:
+    processed image
+    """
+    if CHECK_ORIENTATION:
+        og_page_img = rotate_page(og_page_img)
+    else:
+        og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_RGB2BGR)
+
+    segmented_image, rois = get_rois(og_page_img)
+
+    # Display image with marked regions to test
+    show_image(segmented_image)
+    data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
+
+    for bbox in rois:
+        roi_data = get_roi_data(data, bbox)
+        bolden_roi(og_page_img, roi_data)
+
+    # Display image with bold regions to test
+    # show_image(og_page_img)
+
+    # To-do: handle colored bolding
+    og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_BGR2RGB)
+    return og_page_img
 
 
 # Adding function to decrease pytesseract's image_to_data overhead
