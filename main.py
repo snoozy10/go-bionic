@@ -27,7 +27,40 @@ BOLD_RATIO = 0.5
 LANGUAGE = "deu+eng"
 # magic numbers
 KERNEL_MAGIC_NUMBER = 16
+
+# multiplier for alpha during darkening, [0, 1]. higher = darker.
 ALPHA_MAGIC_NUMBER = 0.85
+
+# opacity of the lightened half (right half) of words
+LIGHTENING_OPACITY = 0.80
+
+
+def get_path(filename: str, folder: str = None, input_mode: bool = True) -> str:
+    """
+    Returns a valid filepath for input/output operations
+    :param filename: name of the i/o file
+    :param folder: folder inside root containing the i/o file. can be None if file is in root folder
+    :param input_mode: boolean indicating if the filepath is for input operation, or output
+    :returns:
+    resulting filepath that is valid for i/o operation
+    """
+    root = Path(__file__).resolve().parent
+
+    if folder is not None:
+        folder_path = os.path.join(root, folder)
+    else:
+        folder_path = root
+
+    filepath = os.path.join(folder_path, filename)
+
+    if input_mode:
+        assert os.path.exists(filepath)
+    else:
+        if not os.path.exists(folder_path):
+            # possibility for error if folder name is nested
+            # To-do
+            os.mkdir(folder_path)
+    return filepath
 
 
 def get_text_height(
@@ -136,14 +169,15 @@ def resize_with_aspect_ratio(
 def show_image(
         image: ndarray[tuple[typing.Any, ...], np.dtype],
         width: int = 450,
-        resize: bool = True
+        resize: bool = True,
+        title: str = "Show Image"
 ) -> None:
     """
     Displays an image using opencv's image viewer
     """
     if resize:
         image = resize_with_aspect_ratio(image, width=width)
-    cv2.imshow("show_image", image)
+    cv2.imshow(title, image)
     cv2.waitKey()
 
 
@@ -206,8 +240,11 @@ def bolden_roi(
             continue
 
         # start adaptive, smooth boldening
+        # show_image(image=word_left_crop, title="Original left")
+
         # -- convert to gray
         gray = cv2.cvtColor(word_left_crop, cv2.COLOR_BGR2GRAY)
+
         # -- threshold, inverted
         _, thresh = cv2.threshold(
             gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
@@ -225,6 +262,7 @@ def bolden_roi(
 
         # apply gaussian blur for smoothening
         blurred_mask = cv2.GaussianBlur(dilated, (3, 3), 0)
+
         alpha = (blurred_mask.astype(np.float32) / 255)[:, :, None]
 
         # magic numbers present. test out values
@@ -233,9 +271,8 @@ def bolden_roi(
         # replace the unedited pixels in original image
         image[abs_y0:abs_y1, abs_x0:mid_x] = sub_final
 
-
         # # To-do lighten out the right portion of the word
-        opacity = 0.8  # 80% opacity = keep 80% of original brightness
+        opacity = LIGHTENING_OPACITY
 
         word_right_crop = image[abs_y0:abs_y1, mid_x:abs_x1]
 
@@ -276,9 +313,7 @@ def bolden_doc() -> None:
     Boldens the first-(BOLD_RATIO) of each word encountered in pdf
     Works properly on horizontally aligned text for now
     """
-    root = Path(__file__).resolve().parent
-    # pdf_path = os.path.join(root, "sample_pdf", "test.pdf")
-    pdf_path = os.path.join(root, "sample_pdf", "geneve_1564.pdf")
+    pdf_path = get_path(folder="sample_pdf", filename="geneve_1564.pdf", input_mode=True)
 
     doc = pymupdf.open(pdf_path)
     images = []
@@ -297,8 +332,10 @@ def bolden_doc() -> None:
 
     # Save all images to one continuous PDF
     if images:
+        filepath = get_path(folder="test_folder", filename="test_boldened.pdf", input_mode=False)
+
         images[0].save(
-            "test_boldened.pdf",
+            filepath,
             save_all=True,
             append_images=images[1:],
             resolution=300.0,
@@ -322,7 +359,7 @@ def bolden_image(
     segmented_image, rois = get_rois(og_page_img)
 
     # Display image with marked regions to test
-    show_image(segmented_image)
+    # show_image(segmented_image)
     data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
 
     for bbox in rois:

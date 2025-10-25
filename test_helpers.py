@@ -1,17 +1,13 @@
 from PIL import Image
-import os
-from pathlib import Path
 import pymupdf
 import numpy as np
 import pytesseract
 import cv2
-from main import get_rois, bolden_roi, bolden_image, show_image, get_roi_data, LANGUAGE
+from main import get_path, get_rois, bolden_roi, bolden_image, show_image, get_roi_data, LANGUAGE
+TEST_FOLDER = "test_folder"
 
 
-def run_data_first():
-    root = Path(__file__).resolve().parent
-    pdf_path = os.path.join(root, "sample_pdf", "test.pdf")
-
+def run_data_first(pdf_path: str):
     doc = pymupdf.open(pdf_path)
     page_index = 0
     page = doc[page_index]
@@ -27,12 +23,10 @@ def run_data_first():
         print(test_result["text"])
 
 
-def save_og_page_imgs(pdf_name="geneve_1564.pdf", page_count=1) -> None:
+def save_og_page_imgs(pdf_path: str, page_count: int = 1) -> str:
     """
     Helper function for testing purposes. Converts target pdf pages to images
     """
-    root = Path(__file__).resolve().parent
-    pdf_path = os.path.join(root, "sample_pdf", pdf_name)
     doc = pymupdf.open(pdf_path)
     page_count = min(page_count, len(doc))
     for page_index in range(page_count):
@@ -41,14 +35,16 @@ def save_og_page_imgs(pdf_name="geneve_1564.pdf", page_count=1) -> None:
         # get RGB pixmap
         pix = page.get_pixmap(dpi=300, colorspace=pymupdf.csRGB)
         og_page_img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
-        Image.fromarray(og_page_img).save(f"test_page_{page_index}.png")
+        filepath = get_path(folder=TEST_FOLDER, filename="test_page.png", input_mode=False)
+        Image.fromarray(og_page_img).save(filepath)
+        return filepath
 
 
-def test_orientation() -> None:
+def test_orientation(image_path: str) -> None:
     """
     Helper function to test pytesseract's OSD and rotate behavior
     """
-    img = Image.open("page_0.png").convert('RGB')
+    img = Image.open(image_path).convert('RGB')
 
     osd = pytesseract.image_to_osd(img, output_type='dict')
 
@@ -73,12 +69,14 @@ def test_orientation() -> None:
     # Display image with bold regions to test
     show_image(og_page_img)
     og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_BGR2RGB)
+    filepath = get_path(folder=TEST_FOLDER, filename="test_ori.png", input_mode=False)
 
-    Image.fromarray(og_page_img).save(f"page_0_ori.png")
+    Image.fromarray(og_page_img).save(filepath)
 
 
 if __name__ == "__main__":
-    save_og_page_imgs(pdf_name="test.pdf", page_count=1)
-    og_page_img = Image.open("test_page_0.png").convert('RGB')
+    pdf_path = get_path(folder=TEST_FOLDER, filename="test.pdf", input_mode=True)
+    filepath = save_og_page_imgs(pdf_path, page_count=1)
+    og_page_img = Image.open(filepath).convert('RGB')
     og_page_img = bolden_image(np.array(og_page_img))
-    Image.fromarray(og_page_img).save(f"test_page_0.png")
+    Image.fromarray(og_page_img).save(filepath)
