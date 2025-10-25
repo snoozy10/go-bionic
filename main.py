@@ -18,14 +18,18 @@ from numpy import floating, ndarray
 THRESHOLD_REGION_IGNORE = 40
 # max number of words to consider for mean/median text height in a text-region
 MAX_WORD_SAMPLES = 10
+
 # check and correct the orientation of pdfs before going bionic
 CHECK_ORIENTATION = False
+
 # ratio of word-width getting boldened
 BOLD_RATIO = 0.5
+
 # languages in the pdf to process by pytesseract
 # https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html
 LANGUAGE = "deu+eng"
-# magic numbers
+
+# magic number to scale kernel size wrt text height. useful for large texts
 KERNEL_MAGIC_NUMBER = 16
 
 # multiplier for alpha during darkening, [0, 1]. higher = darker.
@@ -35,9 +39,13 @@ ALPHA_MAGIC_NUMBER = 0.85
 LIGHTENING_OPACITY = 0.80
 
 
-def get_path(filename: str, folder: str = None, input_mode: bool = True) -> str:
+def get_path(
+        filename: str,
+        folder: str = None,
+        input_mode: bool = True
+) -> str:
     """
-    Returns a valid filepath for input/output operations
+    Returns a valid filepath for read/write operations
     :param filename: name of the i/o file
     :param folder: folder inside root containing the i/o file. can be None if file is in root folder
     :param input_mode: boolean indicating if the filepath is for input operation, or output
@@ -239,10 +247,9 @@ def bolden_roi(
         if word_left_crop.size == 0:
             continue
 
-        # start adaptive, smooth boldening
-        # show_image(image=word_left_crop, title="Original left")
+        # -------------- start adaptive, smooth boldening --------------
 
-        # -- convert to gray
+        # convert to gray
         gray = cv2.cvtColor(word_left_crop, cv2.COLOR_BGR2GRAY)
 
         # -- threshold, inverted
