@@ -36,6 +36,7 @@ While this makes the pdf/html text selectable, it doesn't really help with going
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
   - Maybe OSD per ROI instead of entire page? perhaps both??
 - Handle colored boldening
+- Filter out ROI with high overlap
 <br><br>
 > [!Note]
 > boldening = bolding. Boldening used for personal preference 😄
