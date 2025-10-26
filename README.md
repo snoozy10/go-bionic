@@ -14,9 +14,9 @@ Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
 Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
 <br><br>
 # Result
-Input: [geneve_1564.pdf](/sample_pdf/geneve_1564.pdf)
+Input: [geneve_1564.pdf](/sample_pdfs/geneve_1564.pdf)
 <br>
-Output: [boldened.pdf](boldened.pdf)
+Output: [geneve_1564_boldened.pdf](geneve_1564_boldened.pdf)
 <br><br>
 # Initial idea
 `pdf` -> `high-fidelity html` (`pdf2htmlEX`/`tesseract`) -> `html with bionic font`
