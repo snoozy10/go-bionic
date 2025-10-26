@@ -16,10 +16,11 @@ from numpy import floating, ndarray
 
 # threshold of regions to ignore
 THRESHOLD_REGION_IGNORE = 40
+
 # max number of words to consider for mean/median text height in a text-region
 MAX_WORD_SAMPLES = 10
 
-# check and correct the orientation of pdfs before going bionic
+# check and correct the orientation of pdfs before going bionic. set to True for skewed layouts
 CHECK_ORIENTATION = False
 
 # ratio of word-width getting boldened
@@ -29,7 +30,8 @@ BOLD_RATIO = 0.5
 # https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html
 LANGUAGE = "deu+eng"
 
-# magic number to scale kernel size wrt text height. useful for large texts
+# magic number to scale kernel size wrt text height.
+# useful for large texts. higher = weaker darkening wrt height.
 KERNEL_MAGIC_NUMBER = 16
 
 # multiplier for alpha during darkening, [0, 1]. higher = darker.
@@ -45,16 +47,19 @@ def get_path(
         input_mode: bool = True
 ) -> str:
     """
-    Returns a valid filepath for read/write operations
-    :param filename: name of the i/o file
-    :param folder: folder inside root containing the i/o file. can be None if file is in root folder
+    Returns a valid filepath for io operations
+    :param filename: name of the io file
+    :param folder: folder inside root containing the io file. can be None if file is in root folder
     :param input_mode: boolean indicating if the filepath is for input operation, or output
     :returns:
-    resulting filepath that is valid for i/o operation
+        resulting filepath that is valid for io operation
     """
     root = Path(__file__).resolve().parent
 
     if folder is not None:
+        # possibility for error if folder name is nested
+        # maybe allow nested folders and use mkdirs instead of mkdir?
+        # To-do
         folder_path = os.path.join(root, folder)
     else:
         folder_path = root
@@ -65,89 +70,8 @@ def get_path(
         assert os.path.exists(filepath)
     else:
         if not os.path.exists(folder_path):
-            # possibility for error if folder name is nested
-            # To-do
             os.mkdir(folder_path)
     return filepath
-
-
-def get_text_height(
-        data: Any, sample_limit: int = MAX_WORD_SAMPLES, mean: bool = True
-) -> floating[Any] | None:
-    """
-    Calculates the mean/median height of text in regional text
-
-    :param data: extracted data within roi using pytesseract
-    :param sample_limit: how many words to sample from the region (to keep it fast)
-    :param mean: boolean indicating if function should return mean. true:false = mean:median
-    :returns:
-        mean/median height of the text in data["text"]
-    """
-    heights = []
-    for i, word in enumerate(data["text"]):
-        if not word.strip():
-            continue
-        h = data["height"][i]
-        heights.append(h)
-        if len(heights) >= sample_limit:
-            break
-
-    if not heights:
-        return None  # no text found
-    if mean:
-        return np.mean(heights)
-    return np.median(heights)
-
-
-# Source: https://gist.github.com/akash-ch2812/d42acf86e4d6562819cf4cd37d1195e7
-# Edited before use
-def get_rois(
-        image: ndarray[tuple[typing.Any, ...], np.dtype]
-) -> tuple[ndarray[tuple[typing.Any, ...], np.dtype], list[tuple[int, int, int, int]]]:
-    """
-    Gets the bounding co-ordinates of sections within an image
-    :param image: numpy array representation of the image
-    :returns:
-        image_copy: a copy of the image with bounding boxes drawn in
-        rois: a list of the four bounding co-ordinates of rois
-    """
-
-    # only tinker with a copy of the og image, and draw rectangles in a copied image
-    image_copy = image.copy()
-
-    gray = cv2.cvtColor(image_copy, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (9, 9), 0)
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30)
-
-    # Dilate to combine adjacent text contours
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-    dilate = cv2.dilate(thresh, kernel, iterations=4)
-
-    # Find contours, highlight text areas
-    contours = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = contours[0] if len(contours) == 2 else contours[1]
-
-    rois = []
-
-    for c in contours:
-        x0, y0, w, h = cv2.boundingRect(c)
-
-        if w < THRESHOLD_REGION_IGNORE or h < THRESHOLD_REGION_IGNORE:
-            continue
-
-        # make sure region is within image bounds
-        x1 = x0 + w
-        y1 = y0 + h
-        x0, y0 = max(0, x0), max(0, y0)
-        x1, y1 = min(image_copy.shape[1], x1), min(image_copy.shape[0], y1)
-
-        # draw the bounding boxes
-        image_copy = cv2.rectangle(image_copy, (x0, y0), (x1, y1), color=(255, 0, 255), thickness=3)
-        roi_bbox = (x0, y0, x1, y1)
-
-        rois.append(roi_bbox)
-
-    return image_copy, rois
 
 
 def resize_with_aspect_ratio(
@@ -184,12 +108,88 @@ def show_image(
     Displays an image using opencv's image viewer
     """
     if resize:
-        image = resize_with_aspect_ratio(image, width=width)
+        image = resize_with_aspect_ratio(image=image, width=width)
     cv2.imshow(title, image)
     cv2.waitKey()
 
 
+def bolden_crop_region(
+        image: ndarray[tuple[typing.Any, ...], np.dtype],
+        text_height: floating[Any],
+
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
+    """
+    Increases stroke width in the cropped region
+    :param image: cropped image of the word-region to bolden
+    :param text_height: mean/median text height in roi
+    :returns:
+        cropped image with thicker strokes
+    """
+
+    # convert to gray
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # -- threshold mask, inverted
+    _, thresh = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    # choose kernel size by text height. use a *magic number*
+    k = max(1, int(text_height / KERNEL_MAGIC_NUMBER))
+
+    # use a circular or disk-shaped structuring element for morphological operations
+    # useful for smoothing out corners, removing small circular noise, etc
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+
+    # bolden the first-(ratio) of the word
+    dilated = cv2.dilate(thresh, kernel, iterations=1)
+
+    # apply gaussian blur for smoothening
+    blurred_mask = cv2.GaussianBlur(dilated, (3, 3), 0)
+
+    alpha = (blurred_mask.astype(np.float32) / 255)[:, :, None]
+
+    # bolden. use color of nearest text pixel (using morphological reconstruction)
+    text_color = cv2.inpaint(image, (255 - thresh).astype(np.uint8), 3, cv2.INPAINT_TELEA)
+    sub_final = (image * (1 - alpha) + text_color * alpha).astype(np.uint8)
+
+    # bolden. do not preserve color. magic number present, test out values
+    # sub_final = (image * (1 - ALPHA_MAGIC_NUMBER * alpha)).astype(np.uint8)
+    return sub_final
+
+
+def get_text_height(
+        data: Any,
+        sample_limit: int = MAX_WORD_SAMPLES,
+        mean: bool = True
+) -> floating[Any] | None:
+    """
+    Calculates the mean/median height of text in regional text
+
+    :param data: extracted data within roi using pytesseract
+    :param sample_limit: how many words to sample from the region (to keep it fast)
+    :param mean: boolean indicating if function should return mean. true:false = mean:median
+    :returns:
+        mean/median height of the text in data["text"]
+    """
+    heights = []
+    for i, word in enumerate(data["text"]):
+        if not word.strip():
+            continue
+        h = data["height"][i]
+        heights.append(h)
+        if len(heights) >= sample_limit:
+            break
+
+    if not heights:
+        return None  # no text found
+    if mean:
+        return np.mean(heights)
+    return np.median(heights)
+
+
 # Note: current implementation cannot handle a page with both horizontal and vertical texts
+# Note: anti-pattern. blob.
 # To-do
 def bolden_roi(
         image: ndarray[tuple[typing.Any, ...], np.dtype],
@@ -201,7 +201,7 @@ def bolden_roi(
     :param roi_data: data belonging to this specific roi i.e. pytesseract's image_to_data for current roi
     """
     # get the mean height of available text within the region, or None if no text
-    mean_height = get_text_height(roi_data, 20, False)
+    mean_height = get_text_height(data=roi_data, sample_limit=20, mean=False)
 
     # if mean height is None, i.e. no text in roi, return
     if mean_height is None:
@@ -212,7 +212,6 @@ def bolden_roi(
         word = word.strip()
         if not word:
             continue
-        # print(word)
 
         # get word width, height, ...
         w = roi_data["width"][i]
@@ -220,7 +219,7 @@ def bolden_roi(
         x = roi_data["left"][i]
         y = roi_data["top"][i]
 
-        # if text too small, ignore
+        # if text too small, skip boldening. 6pt text in 300dpi ~ 24 pixels
         if h < 5:
             continue
 
@@ -242,43 +241,14 @@ def bolden_roi(
 
         # Crop the region from full image
         word_left_crop = image[abs_y0:abs_y1, abs_x0:mid_x]
+        sub_final = bolden_crop_region(image=word_left_crop, text_height=mean_height)
 
-        # if cropping yields no region, skip
-        if word_left_crop.size == 0:
-            continue
-
-        # -------------- start adaptive, smooth boldening --------------
-
-        # convert to gray
-        gray = cv2.cvtColor(word_left_crop, cv2.COLOR_BGR2GRAY)
-
-        # -- threshold, inverted
-        _, thresh = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )
-
-        # choose kernel size by text height. use a *magic number*
-        k = max(1, int(mean_height / KERNEL_MAGIC_NUMBER))
-
-        # use a circular or disk-shaped structuring element for morphological operations
-        # useful for smoothing out corners, removing small circular noise, etc
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-
-        # bolden the first-(ratio) of the word
-        dilated = cv2.dilate(thresh, kernel, iterations=1)
-
-        # apply gaussian blur for smoothening
-        blurred_mask = cv2.GaussianBlur(dilated, (3, 3), 0)
-
-        alpha = (blurred_mask.astype(np.float32) / 255)[:, :, None]
-
-        # magic numbers present. test out values
-        sub_final = (word_left_crop * (1 - ALPHA_MAGIC_NUMBER * alpha)).astype(np.uint8)
+        # show_image(word_left_crop, title="original left crop")
 
         # replace the unedited pixels in original image
         image[abs_y0:abs_y1, abs_x0:mid_x] = sub_final
 
-        # # To-do lighten out the right portion of the word
+        # To-do lighten out the right portion of the word
         opacity = LIGHTENING_OPACITY
 
         word_right_crop = image[abs_y0:abs_y1, mid_x:abs_x1]
@@ -294,93 +264,6 @@ def bolden_roi(
         image[abs_y0:abs_y1, mid_x:abs_x1] = lightened
 
 
-def rotate_page(
-        og_page_img: ndarray[tuple[typing.Any, ...], np.dtype]
-) -> ndarray[tuple[typing.Any, ...], np.dtype]:
-    """
-    Correct image's orientation issues
-    :param og_page_img: original page image
-    :returns:
-        og_page_img: rotated (horizontal text) page image
-    """
-    og_page_img = Image.fromarray(og_page_img)
-    osd = pytesseract.image_to_osd(og_page_img, output_type='dict')
-    rotate = osd['rotate']
-
-    if rotate > 0:
-        og_page_img = og_page_img.rotate(360 - rotate, expand=True)
-
-    # convert from RGB to BGR
-    og_page_img = cv2.cvtColor(np.array(og_page_img), cv2.COLOR_RGB2BGR)
-    return og_page_img
-
-
-def bolden_doc() -> None:
-    """
-    Boldens the first-(BOLD_RATIO) of each word encountered in pdf
-    Works properly on horizontally aligned text for now
-    """
-    pdf_path = get_path(folder="sample_pdf", filename="geneve_1564.pdf", input_mode=True)
-
-    doc = pymupdf.open(pdf_path)
-    images = []
-
-    for page_index in range(len(doc)):
-        page = doc[page_index]
-
-        # get RGB pixmap
-        pix = page.get_pixmap(dpi=300)
-        og_page_img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
-
-        og_page_img = bolden_image(og_page_img)
-
-        # save boldened image to list
-        images.append(Image.fromarray(og_page_img))
-
-    # Save all images to one continuous PDF
-    if images:
-        filepath = get_path(folder="test_folder", filename="test_boldened.pdf", input_mode=False)
-
-        images[0].save(
-            filepath,
-            save_all=True,
-            append_images=images[1:],
-            resolution=300.0,
-        )
-
-
-def bolden_image(
-        og_page_img: ndarray[tuple[typing.Any, ...], np.dtype]
-) -> ndarray[tuple[typing.Any, ...], np.dtype]:
-    """Boldens the first-(BOLD_RATIO) of each word encountered in png
-    Works properly on horizontally aligned text for now
-    :param og_page_img: image to be processed
-    :returns:
-    processed image
-    """
-    if CHECK_ORIENTATION:
-        og_page_img = rotate_page(og_page_img)
-    else:
-        og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_RGB2BGR)
-
-    segmented_image, rois = get_rois(og_page_img)
-
-    # Display image with marked regions to test
-    # show_image(segmented_image)
-    data = pytesseract.image_to_data(og_page_img, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
-
-    for bbox in rois:
-        roi_data = get_roi_data(data, bbox)
-        bolden_roi(og_page_img, roi_data)
-
-    # Display image with bold regions to test
-    # show_image(og_page_img)
-
-    # To-do: handle colored bolding
-    og_page_img = cv2.cvtColor(og_page_img, cv2.COLOR_BGR2RGB)
-    return og_page_img
-
-
 # Adding function to decrease pytesseract's image_to_data overhead
 def get_roi_data(
         data: dict,
@@ -391,7 +274,7 @@ def get_roi_data(
     :param data: pytesseract's image_to_data dictionary for the entire image
     :param roi: bounding box of the roi
     :returns:
-    data dictionary specific to the input roi
+        data dictionary specific to the input roi
     """
     x1, y1, x2, y2 = roi
     indices = []
@@ -404,5 +287,157 @@ def get_roi_data(
     return {k: [v[i] for i in indices] for k, v in data.items()}
 
 
+def get_roi_marked_image(
+        og_page_img: ndarray[tuple[typing.Any, ...], np.dtype],
+        rois: list[tuple[int, int, int, int]]
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
+    """
+    Returns a copy of the og_page_img with rois marked in
+    :param og_page_img: the image to be marked
+    :param rois: a list of the four bounding co-ordinates of rois
+    :returns:
+        a copy of the input image with rois marked in
+    """
+    image_copy = og_page_img.copy()
+    for roi in rois:
+        (x0, y0, x1, y1) = roi
+        image_copy = cv2.rectangle(image_copy, (x0, y0), (x1, y1), color=(255, 0, 255), thickness=3)
+    return image_copy
+
+
+# Source: https://gist.github.com/akash-ch2812/d42acf86e4d6562819cf4cd37d1195e7
+# Edited before use
+def get_rois(
+        image: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> list[tuple[int, int, int, int]]:
+    """
+    Gets the bounding co-ordinates of sections within an image
+    :param image: numpy array representation of the image
+    :returns:
+        rois: a list of the four bounding co-ordinates of rois
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (9, 9), 0)
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30)
+
+    # Dilate to combine adjacent text contours
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    dilate = cv2.dilate(thresh, kernel, iterations=4)
+
+    # Find contours, highlight text areas
+    contours = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = contours[0] if len(contours) == 2 else contours[1]
+
+    rois = []
+
+    for c in contours:
+        x0, y0, w, h = cv2.boundingRect(c)
+
+        if w < THRESHOLD_REGION_IGNORE or h < THRESHOLD_REGION_IGNORE:
+            continue
+
+        # make sure region is within image bounds
+        x1 = x0 + w
+        y1 = y0 + h
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(image.shape[1], x1), min(image.shape[0], y1)
+
+        roi_bbox = (x0, y0, x1, y1)
+
+        rois.append(roi_bbox)
+
+    return rois
+
+
+def rotate_image(
+        image: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
+    """
+    Correct image's orientation issues
+    :param image: original page image
+    :returns:
+        og_page_img: rotated (horizontal text) page image
+    """
+    image = Image.fromarray(image)
+    osd = pytesseract.image_to_osd(image, output_type='dict')
+    rotate = osd['rotate']
+
+    if rotate > 0:
+        image = image.rotate(360 - rotate, expand=True)
+
+    # convert from RGB to BGR
+    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    return image
+
+
+def bolden_image(
+        image: ndarray[tuple[typing.Any, ...], np.dtype]
+) -> ndarray[tuple[typing.Any, ...], np.dtype]:
+    """Boldens the first-(BOLD_RATIO) of each word encountered in png
+    Works properly on horizontally aligned text for now
+    :param image: image to be processed
+    :returns:
+        processed image
+    """
+    if CHECK_ORIENTATION:
+        image = rotate_image(image=image)
+    else:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+    rois = get_rois(image=image)
+
+    # Display image with marked regions to test
+    # segmented_image = get_roi_marked_image(og_page_img, rois)
+    # show_image(segmented_image)
+
+    data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
+
+    for roi in rois:
+        roi_data = get_roi_data(data=data, roi=roi)
+        bolden_roi(image=image, roi_data=roi_data)
+
+    # Display image with bold regions to test
+    # show_image(og_page_img)
+
+    # To-do: handle colored bolding
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
+
+
+def bolden_doc(
+        pdf_path: str
+) -> None:
+    """
+    Boldens the first-(BOLD_RATIO) of each word encountered in pdf
+    Works properly on horizontally aligned text for now
+    """
+    doc = pymupdf.open(pdf_path)
+    images = []
+
+    for page_index in range(len(doc)):
+        page = doc[page_index]
+
+        # get RGB pixmap
+        pix = page.get_pixmap(dpi=300)
+        og_page_img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
+
+        og_page_img = bolden_image(image=og_page_img)
+
+        # save boldened image to list
+        images.append(Image.fromarray(og_page_img))
+
+    # Save all images to one continuous PDF
+    if images:
+        filepath = get_path(filename="boldened.pdf", input_mode=False)
+
+        images[0].save(
+            filepath,
+            save_all=True,
+            append_images=images[1:],
+            resolution=300.0,
+        )
+
+
 if __name__ == "__main__":
-    bolden_doc()
+    pdf_path = get_path(folder="sample_pdf", filename="geneve_1564.pdf", input_mode=True)
+    bolden_doc(pdf_path=pdf_path)
