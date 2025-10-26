@@ -35,7 +35,6 @@ While this makes the pdf/html text selectable, it doesn't really help with going
 - Add concurrency/parallelism as boldening of words are inherently independent
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
   - Maybe OSD per ROI instead of entire page? Perhaps both??
-- Handle colored boldening
 - Filter out ROI with high overlap (i.e. child ROI)
 - Accurate character counting and boldening. Currently boldens exactly first-(ratio) of a word, disregarding character edges.
 <br><br>
