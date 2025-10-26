@@ -134,7 +134,7 @@ def bolden_crop_region(
         gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
 
-    # choose kernel size by text height. use a *magic number*
+    # choose kernel size by text height. set KERNEL_MAGIC_NUMBER >= 15
     k = max(1, int(text_height / KERNEL_MAGIC_NUMBER))
 
     # use a circular or disk-shaped structuring element for morphological operations
@@ -149,8 +149,11 @@ def bolden_crop_region(
 
     alpha = (blurred_mask.astype(np.float32) / 255)[:, :, None]
 
-    # bolden. use color of nearest text pixel (using morphological reconstruction)
-    text_color = cv2.inpaint(image, (255 - thresh).astype(np.uint8), 3, cv2.INPAINT_TELEA)
+    # bolden AND darken. use color of nearest text pixel
+    # inpainting: https://docs.opencv.org/3.4/df/d3d/tutorial_py_inpainting.html
+    # text_color = cv2.inpaint(image, (255 - thresh).astype(np.uint8), 3, cv2.INPAINT_TELEA)
+    text_color = cv2.mean(image, mask=thresh)[0:3]
+    text_color = np.full_like(image, text_color)
     sub_final = (image * (1 - alpha) + text_color * alpha).astype(np.uint8)
 
     # bolden. do not preserve color. magic number present, test out values
@@ -405,14 +408,16 @@ def bolden_image(
 
 
 def bolden_doc(
-        pdf_path: str
+        input_pdf_path: str,
+        output_pdf_path: str
 ) -> None:
     """
     Boldens the first-(BOLD_RATIO) of each word encountered in pdf
     Works properly on horizontally aligned text for now
     """
-    doc = pymupdf.open(pdf_path)
+    doc = pymupdf.open(input_pdf_path)
     images = []
+    # images = [None] * len(doc)
 
     for page_index in range(len(doc)):
         page = doc[page_index]
@@ -423,12 +428,15 @@ def bolden_doc(
 
         og_page_img = bolden_image(image=og_page_img)
 
-        # save boldened image to list
+        # save boldened image to list. use when images = []
         images.append(Image.fromarray(og_page_img))
 
+        # images[page_index] = Image.fromarray(og_page_img)  # use when images = [None] * <doc length>
+
+    doc.close()
     # Save all images to one continuous PDF
     if images:
-        filepath = get_path(filename="boldened.pdf", input_mode=False)
+        filepath = output_pdf_path
 
         images[0].save(
             filepath,
@@ -439,5 +447,7 @@ def bolden_doc(
 
 
 if __name__ == "__main__":
-    pdf_path = get_path(folder="sample_pdf", filename="geneve_1564.pdf", input_mode=True)
-    bolden_doc(pdf_path=pdf_path)
+    pdf_path = get_path(folder="sample_pdfs", filename="geneve_1564.pdf", input_mode=True)
+    save_path = get_path(folder=None, filename="geneve_1564_boldened.pdf", input_mode=False)
+    bolden_doc(input_pdf_path=pdf_path, output_pdf_path=save_path)
+

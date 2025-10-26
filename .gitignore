@@ -1,6 +1,6 @@
 *.pdf
-!boldened.pdf
-!sample_pdf/geneve_1564.pdf
+!geneve_1564_boldened.pdf
+!sample_pdfs/geneve_1564.pdf
 test_folder/
 
 *.png
