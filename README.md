@@ -7,7 +7,7 @@
 - [Future improvements](#future-improvements)
 <br><br> 
 # Goal
-Apply bionic reading font (font that aids faster reading; also known as adhd font or fast font) to a PDF _while maintaining layout fidelity_.
+Apply text-formatting that mimics the bionic reading font (also known as ADHD font or fast font) to a PDF _while maintaining layout fidelity_.
 <br><br>
 Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
 <br>
