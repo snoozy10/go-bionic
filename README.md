@@ -9,16 +9,24 @@
 # Goal
 Apply text-formatting that mimics the bionic reading font (also known as ADHD font or fast font) to a PDF _while maintaining layout fidelity_.
 <br><br>
-Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
+Sample pdf 1: "Bible de Genève, 1564 (fonts and typography)"
 <br>
 Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
+<br><br>
+Sample pdf 2: "Deep Learning: An Introduction for Applied Mathematicians"
+<br>
+Source: [Link to Paper](https://arxiv.org/pdf/1801.05894)
 <br><br>
 > [!Note]
 > This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. There are much better ways to handle "true"/"vector" PDFs that are faster, and can apply character-wise boldening.
 # Result
-Input: [geneve_1564.pdf](/sample_pdfs/geneve_1564.pdf)
+Input 1: [geneve_1564.pdf](/sample_pdfs/geneve_1564.pdf)
 <br>
-Output: [geneve_1564_boldened.pdf](geneve_1564_boldened.pdf)
+Output 1: [geneve_1564_boldened.pdf](geneve_1564_boldened.pdf)
+<br><br>
+Input 2: [deep_learning.pdf](/sample_pdfs/deep_learning.pdf)
+<br>
+Output 2: [deep_learning_boldened.pdf](deep_learning_boldened.pdf)
 <br><br>
 # Initial idea
 `pdf` -> `high-fidelity html` (`pdf2htmlEX`/`tesseract`) -> `html with bionic font`
