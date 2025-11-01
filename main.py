@@ -25,7 +25,7 @@ THRESHOLD_REGION_IGNORE = 40
 MAX_WORD_SAMPLES = 10
 
 # check and correct the orientation of pdfs before going bionic. set to True for skewed layouts
-CHECK_ORIENTATION = False
+CHECK_ORIENTATION = True
 
 # ratio of word-width getting boldened
 BOLD_RATIO = 0.5
@@ -454,9 +454,11 @@ def process_page(
         pix = doc.get_page_pixmap(pno=page_index, dpi=250, alpha=False)  # lower DPI for speed
 
     image = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
+    if CHECK_ORIENTATION:
+        image = rotate_image(image=image)
+
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     image = bolden_image(image)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     _, img_bytes_png = cv2.imencode(".png", image)
     result = page_width, page_height, bytes(img_bytes_png)
@@ -500,12 +502,12 @@ def bolden_doc_mp(
 if __name__ == "__main__":
     pdf_path = get_path(
         folder="sample_pdfs",
-        filename="geneve_1564.pdf",
+        filename="sv600_c_normal.pdf",
         input_mode=True,
     )
     save_path = get_path(
-        folder="None",
-        filename="geneve_1564_boldened.pdf",
+        folder="sample_output",
+        filename="sv600_c_normal_boldened.pdf",
         input_mode=False
     )
 
