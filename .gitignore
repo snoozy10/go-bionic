@@ -1,8 +1,12 @@
 *.pdf
 !geneve_1564_boldened.pdf
+!deep_learning_boldened.pdf
 !sample_pdfs/geneve_1564.pdf
+!sample_pdfs/deep_learning.pdf
+
 test_folder/
 exp.py
+exp_wo_pytesseract.py
 
 *.png
 
