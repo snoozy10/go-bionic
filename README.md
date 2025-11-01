@@ -9,6 +9,8 @@
 # Goal
 Apply text-formatting that mimics the bionic reading font (also known as ADHD font or fast font) to a PDF _while maintaining layout fidelity_.
 <br><br>
+This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. There are much better ways to handle "true"/"vector" PDFs that are faster, and can apply true text-formatting to the file.
+<br><br>
 Sample pdf: "Bible de Genève, 1564 (fonts and typography)"
 <br>
 Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
