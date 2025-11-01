@@ -6,13 +6,17 @@ from typing import Any
 import cv2  # openCV https://docs.opencv.org/4.12.0/
 import pytesseract
 import pymupdf
+
 import numpy as np
-from PIL import Image
+from numpy import floating, ndarray
 
 import os
 from pathlib import Path
+import time
+from tqdm import tqdm
 
-from numpy import floating, ndarray
+from multiprocessing import cpu_count
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # threshold of regions to ignore
 THRESHOLD_REGION_IGNORE = 40
@@ -28,17 +32,17 @@ BOLD_RATIO = 0.5
 
 # languages in the pdf to process by pytesseract
 # https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html
-LANGUAGE = "deu+eng"
+LANGUAGE = "deu"  # for the wild umlauts :)
 
 # magic number to scale kernel size wrt text height.
 # useful for large texts. higher = weaker darkening wrt height.
 KERNEL_MAGIC_NUMBER = 16
 
-# multiplier for alpha during darkening, [0, 1]. higher = darker.
-ALPHA_MAGIC_NUMBER = 0.85
-
 # opacity of the lightened half (right half) of words
-LIGHTENING_OPACITY = 0.80
+LIGHTENING_OPACITY = 0.70
+
+# Precompute 256 look-up-tables for alpha calculation
+LUT_NORM = np.arange(256, dtype=np.float32) / 255.0
 
 
 def get_path(
@@ -113,7 +117,7 @@ def show_image(
     cv2.waitKey()
 
 
-def bolden_crop_region(
+def bolden_word_crop(
         image: ndarray[tuple[typing.Any, ...], np.dtype],
         text_height: floating[Any],
 
@@ -126,38 +130,34 @@ def bolden_crop_region(
         cropped image with thicker strokes
     """
 
-    # convert to gray
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
     # -- threshold mask, inverted
     _, thresh = cv2.threshold(
-        gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
-
-    # choose kernel size by text height. set KERNEL_MAGIC_NUMBER >= 15
+    # choose kernel size by text height
+    # set KERNEL_MAGIC_NUMBER >= 15 (based on dpi=300 and minimum height of legible text)
     k = max(1, int(text_height / KERNEL_MAGIC_NUMBER))
 
     # use a circular or disk-shaped structuring element for morphological operations
     # useful for smoothing out corners, removing small circular noise, etc
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
 
-    # bolden the first-(ratio) of the word
-    dilated = cv2.dilate(thresh, kernel, iterations=1)
+    # dilate the thresh mask. then apply gaussian blur for smoother edges
+    blurred_mask = cv2.GaussianBlur(
+        cv2.dilate(thresh, kernel, iterations=1),
+        (3, 3),
+        0
+    )
+    alpha = cv2.LUT(blurred_mask, LUT_NORM).astype(np.float32)[:, :, None]
 
-    # apply gaussian blur for smoothening
-    blurred_mask = cv2.GaussianBlur(dilated, (3, 3), 0)
-
-    alpha = (blurred_mask.astype(np.float32) / 255)[:, :, None]
-
-    # bolden AND darken. use color of nearest text pixel
-    # inpainting: https://docs.opencv.org/3.4/df/d3d/tutorial_py_inpainting.html
-    # text_color = cv2.inpaint(image, (255 - thresh).astype(np.uint8), 3, cv2.INPAINT_TELEA)
+    # bolden AND darken. use mean color of nearest text pixel
     text_color = cv2.mean(image, mask=thresh)[0:3]
     text_color = np.full_like(image, text_color)
     sub_final = (image * (1 - alpha) + text_color * alpha).astype(np.uint8)
 
-    # bolden. do not preserve color. magic number present, test out values
-    # sub_final = (image * (1 - ALPHA_MAGIC_NUMBER * alpha)).astype(np.uint8)
+    # bolden. do not preserve color. higher alpha_multiplier = more darkening
+    # alpha_multiplier = 0.85
+    # sub_final = (image * (1 - alpha_multiplier * alpha)).astype(np.uint8)
     return sub_final
 
 
@@ -223,7 +223,7 @@ def bolden_roi(
         y = roi_data["top"][i]
 
         # if text too small, skip boldening. 6pt text in 300dpi ~ 24 pixels
-        if h < 5:
+        if h < KERNEL_MAGIC_NUMBER:
             continue
 
         # map word coordinates to full (uncropped) image
@@ -244,7 +244,7 @@ def bolden_roi(
 
         # Crop the region from full image
         word_left_crop = image[abs_y0:abs_y1, abs_x0:mid_x]
-        sub_final = bolden_crop_region(image=word_left_crop, text_height=mean_height)
+        sub_final = bolden_word_crop(image=word_left_crop, text_height=mean_height)
 
         # show_image(word_left_crop, title="original left crop")
 
@@ -280,6 +280,7 @@ def get_roi_data(
         data dictionary specific to the input roi
     """
     x1, y1, x2, y2 = roi
+
     indices = []
     for i, word in enumerate(data["text"]):
         if not word.strip():
@@ -310,7 +311,7 @@ def get_roi_marked_image(
 
 # Source: https://gist.github.com/akash-ch2812/d42acf86e4d6562819cf4cd37d1195e7
 # Edited before use
-def get_rois(
+def get_roi_bounds(
         image: ndarray[tuple[typing.Any, ...], np.dtype]
 ) -> list[tuple[int, int, int, int]]:
     """
@@ -319,16 +320,36 @@ def get_rois(
     :returns:
         rois: a list of the four bounding co-ordinates of rois
     """
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (9, 9), 0)
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30)
+    # Next chain of operations:
+    # 1. gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # 2. blur = cv2.GaussianBlur(gray, (9, 9), 0)
+    # 3. thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 30)
+
+    thresh = cv2.adaptiveThreshold(
+        cv2.GaussianBlur(
+            cv2.cvtColor(
+                image,
+                cv2.COLOR_BGR2GRAY
+            ),
+            (9, 9),
+            0
+        ),
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        11,
+        30
+    )
 
     # Dilate to combine adjacent text contours
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-    dilate = cv2.dilate(thresh, kernel, iterations=4)
 
     # Find contours, highlight text areas
-    contours = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = cv2.findContours(
+        cv2.dilate(thresh, kernel, iterations=4),
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
     contours = contours[0] if len(contours) == 2 else contours[1]
 
     rois = []
@@ -346,7 +367,6 @@ def get_rois(
         x1, y1 = min(image.shape[1], x1), min(image.shape[0], y1)
 
         roi_bbox = (x0, y0, x1, y1)
-
         rois.append(roi_bbox)
 
     return rois
@@ -361,15 +381,26 @@ def rotate_image(
     :returns:
         og_page_img: rotated (horizontal text) page image
     """
-    image = Image.fromarray(image)
     osd = pytesseract.image_to_osd(image, output_type='dict')
     rotate = osd['rotate']
 
     if rotate > 0:
-        image = image.rotate(360 - rotate, expand=True)
+        height, width = image.shape[:2]
 
-    # convert from RGB to BGR
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        center_x = width//2
+        center_y = height//2
+
+        rotation_matrix = cv2.getRotationMatrix2D((center_x, center_y), 360-rotate, 1.0)
+
+        cos = np.abs(rotation_matrix[0][0])
+        sin = np.abs(rotation_matrix[0][1])
+        new_width = int(height * sin + width * cos)
+        new_height = int(height * cos + width * sin)
+
+        rotation_matrix[0][2] += (new_width/2 - center_x)
+        rotation_matrix[1][2] += (new_height/2 - center_y)
+
+        image = cv2.warpAffine(image, rotation_matrix, (new_width, new_height))
     return image
 
 
@@ -382,18 +413,17 @@ def bolden_image(
     :returns:
         processed image
     """
-    if CHECK_ORIENTATION:
-        image = rotate_image(image=image)
-    else:
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-    rois = get_rois(image=image)
+    rois = get_roi_bounds(image=image)
 
     # Display image with marked regions to test
     # segmented_image = get_roi_marked_image(og_page_img, rois)
     # show_image(segmented_image)
 
-    data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT, lang=LANGUAGE)
+    data = pytesseract.image_to_data(
+        image,
+        output_type=pytesseract.Output.DICT,
+        lang=LANGUAGE,
+    )
 
     for roi in rois:
         roi_data = get_roi_data(data=data, roi=roi)
@@ -402,52 +432,90 @@ def bolden_image(
     # Display image with bold regions to test
     # show_image(og_page_img)
 
-    # To-do: handle colored bolding
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # handle colored bolding
     return image
 
 
-def bolden_doc(
+def process_page(
+        pdf_path: str,
+        page_index: int,
+) -> tuple[int, int, bytes]:
+    """
+    Worker method for processing each page in a separate process
+    :param pdf_path: path of the input pdf
+    :param page_index: index of the page being worked with
+    :returns:
+        a tuple containing the width, height, and processed page image as bytes
+    """
+    with pymupdf.open(pdf_path) as doc:
+        page = doc[page_index]
+        page_width = page.rect.width
+        page_height = page.rect.height
+        pix = doc.get_page_pixmap(pno=page_index, dpi=250, alpha=False)  # lower DPI for speed
+
+    image = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    image = bolden_image(image)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    _, img_bytes_png = cv2.imencode(".png", image)
+    result = page_width, page_height, bytes(img_bytes_png)
+
+    return result
+
+
+def bolden_doc_mp(
         input_pdf_path: str,
-        output_pdf_path: str
+        output_pdf_path: str,
 ) -> None:
     """
     Boldens the first-(BOLD_RATIO) of each word encountered in pdf
     Works properly on horizontally aligned text for now
     """
-    doc = pymupdf.open(input_pdf_path)
-    images = []
-    # images = [None] * len(doc)
+    with pymupdf.open(input_pdf_path) as doc:
+        n_pages = len(doc)
 
-    for page_index in range(len(doc)):
-        page = doc[page_index]
+    max_workers = max(1, min(n_pages, cpu_count() - 1))
 
-        # get RGB pixmap
-        pix = page.get_pixmap(dpi=300)
-        og_page_img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
+    with ProcessPoolExecutor(max_workers) as executor:
+        futures = {
+            executor.submit(
+                process_page, input_pdf_path, i
+            ): i for i in range(n_pages)
+        }
+        processed_pages = [None] * n_pages
 
-        og_page_img = bolden_image(image=og_page_img)
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing pages", unit="page"):
+            i = futures[future]
+            processed_pages[i] = future.result()
 
-        # save boldened image to list. use when images = []
-        images.append(Image.fromarray(og_page_img))
-
-        # images[page_index] = Image.fromarray(og_page_img)  # use when images = [None] * <doc length>
-
-    doc.close()
-    # Save all images to one continuous PDF
-    if images:
-        filepath = output_pdf_path
-
-        images[0].save(
-            filepath,
-            save_all=True,
-            append_images=images[1:],
-            resolution=300.0,
-        )
+        with pymupdf.open() as new_doc:
+            for w, h, img_bytes in tqdm(processed_pages, total=len(processed_pages), desc="Adding pages", unit="page"):
+                new_doc.new_page(width=w, height=h).insert_image(pymupdf.Rect(0, 0, w, h), stream=img_bytes)
+            tqdm.write("Saving PDF...")
+            new_doc.ez_save(output_pdf_path)
+            tqdm.write("Boldening complete!")
 
 
 if __name__ == "__main__":
-    pdf_path = get_path(folder="sample_pdfs", filename="geneve_1564.pdf", input_mode=True)
-    save_path = get_path(folder=None, filename="geneve_1564_boldened.pdf", input_mode=False)
-    bolden_doc(input_pdf_path=pdf_path, output_pdf_path=save_path)
+    pdf_path = get_path(
+        folder="sample_pdfs",
+        filename="geneve_1564.pdf",
+        input_mode=True,
+    )
+    save_path = get_path(
+        folder="None",
+        filename="geneve_1564_boldened.pdf",
+        input_mode=False
+    )
+
+    start = time.time()
+    bolden_doc_mp(
+        input_pdf_path=pdf_path,
+        output_pdf_path=save_path
+    )
+    end = time.time()
+    print("Elapsed time using multiprocessing: ", end-start)
+
+
 

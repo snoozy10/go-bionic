@@ -2,8 +2,11 @@
 !geneve_1564_boldened.pdf
 !sample_pdfs/geneve_1564.pdf
 test_folder/
+exp.py
 
 *.png
+
+pseudocode.txt
 
 # reference: google and https://www.toptal.com/developers/gitignore/api/windows,python,pycharm
 .idea/
