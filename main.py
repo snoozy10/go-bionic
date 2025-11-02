@@ -453,15 +453,15 @@ def process_page(
         page_height = page.rect.height
         pix = doc.get_page_pixmap(pno=page_index, dpi=250, alpha=False)  # lower DPI for speed
 
-    image = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, pix.n)
+    image = np.frombuffer(pix.samples, np.uint8).reshape((pix.height, pix.width, pix.n))
     if CHECK_ORIENTATION:
         image = rotate_image(image=image)
 
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     image = bolden_image(image)
 
-    _, img_bytes_png = cv2.imencode(".png", image)
-    result = page_width, page_height, bytes(img_bytes_png)
+    _, img_png_encoded = cv2.imencode(".png", image)
+    result = page_width, page_height, bytes(img_png_encoded)
 
     return result
 
@@ -487,27 +487,75 @@ def bolden_doc_mp(
         }
         processed_pages = [None] * n_pages
 
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing pages", unit="page"):
-            i = futures[future]
-            processed_pages[i] = future.result()
+        def save_using_pymupdf():
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Processing pages", unit="page"):
+                i = futures[future]
+                processed_pages[i] = future.result()
 
-        with pymupdf.open() as new_doc:
-            for w, h, img_bytes in tqdm(processed_pages, total=len(processed_pages), desc="Adding pages", unit="page"):
-                new_doc.new_page(width=w, height=h).insert_image(pymupdf.Rect(0, 0, w, h), stream=img_bytes)
+            with pymupdf.open() as new_doc:
+                for w, h, img_bytes in tqdm(processed_pages, total=len(processed_pages), desc="Adding pages", unit="page"):
+                    new_doc.new_page(width=w, height=h).insert_image(pymupdf.Rect(0, 0, w, h), stream=img_bytes)
+                tqdm.write("Saving PDF...")
+                new_doc.ez_save(output_pdf_path)
+                tqdm.write("Boldening complete!")
+
+        # (pymupdf version) ^ OR v (PIL version)
+        def save_using_PIL():
             tqdm.write("Saving PDF...")
-            new_doc.ez_save(output_pdf_path)
+            if processed_pages:
+                from PIL import Image
+                pil_images = [
+                    Image.frombytes(
+                        mode="RGB",
+                        size=(int(w), int(h)),
+                        data=img
+                    ) for (w, h, img) in processed_pages]
+                pil_images[0].save(
+                    fp=save_path,
+                    save_all=True,
+                    append_images=pil_images[1:],
+                    resolution=300.0
+                )
             tqdm.write("Boldening complete!")
+
+        save_using_pymupdf()
+
+
+def get_input_pdf_path_by_prompting() -> str | None:
+    """
+    A simple filedialog to prompt for the pdf to process
+    :return:
+        absolute filepath as string
+    """
+    from tkinter import filedialog as fd
+
+    root_path = Path(__file__).resolve().parent
+
+    filetypes = (
+        ('pdf files', '*.pdf'),
+    )
+    filepath = fd.askopenfilename(
+        title="go-bionic: Select input PDF",
+        filetypes=filetypes,
+        initialdir=root_path
+    )
+    return filepath
 
 
 if __name__ == "__main__":
-    pdf_path = get_path(
-        folder="sample_pdfs",
-        filename="sv600_c_normal.pdf",
-        input_mode=True,
-    )
+    pdf_path = get_input_pdf_path_by_prompting()
+    if not pdf_path:
+        print("Nothing to convert. Exiting application...")
+        exit()
+
+    filename_wo_extension = Path(pdf_path).stem
+
+    output_folder = "sample_output"
+    output_filename_w_extension = filename_wo_extension + "_boldened.pdf"
+
     save_path = get_path(
-        folder="sample_output",
-        filename="sv600_c_normal_boldened.pdf",
+        folder=output_folder,
+        filename=output_filename_w_extension,
         input_mode=False
     )
 
@@ -518,6 +566,7 @@ if __name__ == "__main__":
     )
     end = time.time()
     print("Elapsed time using multiprocessing: ", end-start)
+
 
 
 
