@@ -12,7 +12,7 @@ Apply text-formatting that mimics the bionic reading font (also known as ADHD fo
 <br><br>
 
 > [!Note]
-> <p>This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. There are much better ways to handle "true"/"vector" PDFs that are faster, and can apply character-wise boldening.</p>
+> <p>This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. Although the current implementation <em>can</em> handle vector PDFs, there are much faster/simpler ways to do so.</p>
 &nbsp;
 # Results
 ### 1.
