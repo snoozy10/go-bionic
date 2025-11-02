@@ -1,33 +1,58 @@
 # Table of Contents
 - [Goal](#goal)
-- [Result](#result)
+- [Results](#results)
 - [Initial idea](#initial-idea)
   - [Issues with the initial idea](#issues-with-the-initial-idea)
 - [Current implementation](#current-implementation)
 - [Future improvements](#future-improvements)
-<br><br> 
+<br><br>
+
 # Goal
 Apply text-formatting that mimics the bionic reading font (also known as ADHD font or fast font) to a PDF _while maintaining layout fidelity_.
 <br><br>
-Sample pdf 1: "Bible de Genève, 1564 (fonts and typography)"
+
+> [!Note]
+> <p>This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. There are much better ways to handle "true"/"vector" PDFs that are faster, and can apply character-wise boldening.</p>
+&nbsp;
+# Results
+### 1.
+Input: [geneve_1564.pdf](/sample_pdfs/geneve_1564.pdf)
 <br>
-Source: [Github page of pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
+Output: [geneve_1564_boldened.pdf](/sample_output/geneve_1564_boldened.pdf)
+<br>
+Bible de Genève, 1564 (fonts and typography)
+<br>
+Source: [Github: pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
 <br><br>
-Sample pdf 2: "Deep Learning: An Introduction for Applied Mathematicians"
+### 2.
+Input: [deep_learning.pdf](/sample_pdfs/deep_learning.pdf)
+<br>
+Output: [deep_learning_boldened.pdf](/sample_output/deep_learning_boldened.pdf)
+<br>
+Deep Learning: An Introduction for Applied Mathematicians
 <br>
 Source: [Link to Paper](https://arxiv.org/pdf/1801.05894)
 <br><br>
-> [!Note]
-> This project was created specifically for raster PDFs e.g. scanned pages saved as PDFs. There are much better ways to handle "true"/"vector" PDFs that are faster, and can apply character-wise boldening.
-# Result
-Input 1: [geneve_1564.pdf](/sample_pdfs/geneve_1564.pdf)
+### 3.
+Input: [public_water_mass_mailing.pdf](/sample_pdfs/public_water_mass_mailing.pdf)
 <br>
-Output 1: [geneve_1564_boldened.pdf](geneve_1564_boldened.pdf)
-<br><br>
-Input 2: [deep_learning.pdf](/sample_pdfs/deep_learning.pdf)
+Output: [public_water_mass_mailing_boldened.pdf](/sample_output/public_water_mass_mailing_boldened.pdf)
 <br>
-Output 2: [deep_learning_boldened.pdf](deep_learning_boldened.pdf)
+Sample Scanned Document: ScanSnap SV600 (Ricoh)
+<br>
+Source: [Link to Document](https://www.pfu.ricoh.com/global/scanners/downloads/v5/sv600_c_normal.pdf)
 <br><br>
+
+### 4.
+Input: [sv600_c_normal.pdf](/sample_pdfs/sv600_c_normal.pdf)
+<br>
+Output: [sv600_c_normal_boldened.pdf](/sample_output/sv600_c_normal_boldened.pdf)
+<br>
+Sample Scanned Document: Public Water Mass Mailing
+<br>
+Source: [Github: Text-Extraction-Scanned-Pdf](https://github.com/fraponyo94/Text-Extraction-Scanned-Pdf/tree/master/sample-scanned-pdfs)
+<br><br>
+
 # Initial idea
 `pdf` -> `high-fidelity html` (`pdf2htmlEX`/`tesseract`) -> `html with bionic font`
 ## Issues with the initial idea
@@ -42,7 +67,6 @@ While this makes the pdf/html text selectable, it doesn't really help with going
 `pdf` -> `pdf with partially boldened words`
 <br><br>
 # Future improvements
-- Add concurrency/parallelism as boldening of words are inherently independent
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
   - Maybe OSD per ROI instead of entire page? Perhaps both??
 - Filter out ROI with high overlap (i.e. child ROI)
