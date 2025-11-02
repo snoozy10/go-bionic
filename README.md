@@ -24,6 +24,7 @@ Bible de Genève, 1564 (fonts and typography)
 <br>
 Source: [Github: pdf2htmlEX](https://github.com/pdf2htmlEX/pdf2htmlEX?tab=readme-ov-file)
 <br><br>
+
 ### 2.
 Input: [deep_learning.pdf](/sample_pdfs/deep_learning.pdf)
 <br>
@@ -33,6 +34,7 @@ Deep Learning: An Introduction for Applied Mathematicians
 <br>
 Source: [Link to Paper](https://arxiv.org/pdf/1801.05894)
 <br><br>
+
 ### 3.
 Input: [public_water_mass_mailing.pdf](/sample_pdfs/public_water_mass_mailing.pdf)
 <br>
@@ -63,13 +65,16 @@ While this makes the pdf/html text selectable, it doesn't really help with going
   - `tesseract` doesn't provide font information.
   - Detecting font is challenging for non-standard fonts (although, this is an issue I plan to revisit)
 <br><br>
+
 # Current implementation
 `pdf` -> `pdf with partially boldened words`
 <br><br>
+
 # Future improvements
 - Robust handling of pages with both horizontal and vertical orientations (currently handles only horizontal text)
   - Maybe OSD per ROI instead of entire page? Perhaps both??
 - Filter out ROI with high overlap (i.e. child ROI)
+- Option to choose output color (grayscale/RGB); implement simpler pipeline for grayscale output
 - Accurate character counting and boldening. Currently boldens exactly first-(ratio) of a word, disregarding character edges.
 <br><br>
 > [!Note]
